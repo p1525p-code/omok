@@ -88,12 +88,12 @@
         socket.on('roleConfirmed', (role) => {
             currentRole = role;
             if (role === 'teacher') {
-                roleDisplay.innerText = "선생님";
+                roleDisplay.innerText = "선생님 (자동 로그인)";
                 roleDisplay.style.color = "red";
                 resetBtn.style.display = "inline-block"; 
                 settingsPanel.style.display = "block"; // 💡 선생님이면 설정 패널 표시
             } else {
-                roleDisplay.innerText = "학생";
+                roleDisplay.innerText = "학생 (자동 로그인)";
                 roleDisplay.style.color = "blue";
                 resetBtn.style.display = "none"; 
                 stopVoteBtn.style.display = "none"; 
@@ -216,6 +216,10 @@
         socket.on('gameReset', () => {
             isGameOver = false;
             infoDiv.classList.remove('win-text');
+        });
+       // 💡 [추가됨] 서버에서 렌주룰 금수 경고가 오면 팝업창을 띄웁니다.
+        socket.on('invalidMove', (message) => {
+            alert(message);
         });
 
         function updateStatusText() {

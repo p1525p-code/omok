@@ -20,30 +20,64 @@ let isGameOver = false;
 // 💡 [변경됨] 고정되었던 시간을 변경 가능한 변수로 바꿉니다.
 let currentVoteTimeLimit = 15; 
 
+// 💡 [변경됨] 백돌(학생)은 5목 이상 승리, 흑돌(선생)은 정확히 5목이어야 승리
 function checkWin(r, c, player) {
     const directions = [
-        [[0, 1], [0, -1]],   
-        [[1, 0], [-1, 0]],   
-        [[1, 1], [-1, -1]],  
-        [[1, -1], [-1, 1]]   
+        [[0, 1], [0, -1]], [[1, 0], [-1, 0]], [[1, 1], [-1, -1]], [[1, -1], [-1, 1]]
     ];
 
     for (let dir of directions) {
         let count = 1; 
         for (let d of dir) {
-            let nr = r + d[0];
-            let nc = c + d[1];
+            let nr = r + d[0]; let nc = c + d[1];
             while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === player) {
-                count++;
-                nr += d[0];
-                nc += d[1];
+                count++; nr += d[0]; nc += d[1];
             }
         }
-        if (count >= 5) return true; 
+        if (player === 2 && count >= 5) return true; // 백돌은 5목 이상이면 무조건 승리
+        if (player === 1 && count === 5) return true; // 흑돌은 정확히 5목일 때만 승리
     }
     return false;
 }
 
+// 💡 [추가됨] 흑돌(선생님)의 렌주룰 금수(3-3, 4-4, 6목)를 판별하는 인공지능 함수
+function checkRenjuFoul(board, r, c) {
+    board[r][c] = 1; // 임시로 돌을 놓아봄
+    const dirs = [ [0,1], [1,0], [1,1], [1,-1] ];
+    let threeCount = 0; let fourCount = 0; let isFiveWin = false;
+
+    for (let i = 0; i < 4; i++) {
+        let [dr, dc] = dirs[i];
+        let line = "";
+        // 착수 지점 기준 앞뒤 5칸씩 총 11칸의 상태를 문자열로 만듦 (O:흑, X:백, .:빈칸)
+        for (let step = -5; step <= 5; step++) {
+            let nr = r + dr * step; let nc = c + dc * step;
+            if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) line += "X"; // 벽은 백돌과 같은 취급
+            else if (board[nr][nc] === 1) line += "O";
+            else if (board[nr][nc] === 2) line += "X";
+            else line += ".";
+        }
+
+        if (line.includes("OOOOOO")) { board[r][c] = 0; return "장목 (6목 이상)"; } // 6목 금지
+        if (line.includes("OOOOO")) { isFiveWin = true; continue; } // 5목 완성이면 승리이므로 예외
+
+        // 4목 패턴 (돌 하나만 더 놓으면 5가 되는 형태)
+        const fourRegex = /(?:\.OOOOX|XOOOO\.|\.OOOO\.|O\.OOO|OOO\.O|OO\.OO)/;
+        if (fourRegex.test(line)) fourCount++;
+
+        // 3목 패턴 (양쪽이 열려있어서 다음 턴에 4를 두 개 만들 수 있는 형태)
+        const threeRegex = /(?:\.\.OOO\.|\.OOO\.\.|\.O\.OO\.|\.OO\.O\.)/;
+        if (threeRegex.test(line)) threeCount++;
+    }
+
+    board[r][c] = 0; // 원상복구
+
+    if (isFiveWin) return null; // 5목 완성이 우선순위 (금수 아님)
+    if (fourCount >= 2) return "쌍사 (4-4)";
+    if (threeCount >= 2) return "쌍삼 (3-3)";
+
+    return null; // 금수가 아님 (정상 착수 가능)
+}
 function calculateCurrentVotes() {
     let voteCounts = {};
     for (const position of Object.values(studentVotes)) {
@@ -97,11 +131,19 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('teacherMove', (data) => {
+        socket.on('teacherMove', (data) => {
         if (socket.id !== teacherSocketId || isGameOver) return; 
 
         const { row, col } = data;
         if (currentTurn === 1 && board[row][col] === 0) {
+            
+            // 💡 [추가됨] 렌주룰 검사! 금수라면 착수를 취소하고 경고를 보냄
+            const foulReason = checkRenjuFoul(board, row, col);
+            if (foulReason) {
+                socket.emit('invalidMove', `🚨 렌주룰 금수입니다!\n사유: ${foulReason}\n다른 곳에 돌을 놓아주세요.`);
+                return; // 턴을 넘기지 않고 함수 종료
+            }
+
             board[row][col] = 1; 
             io.emit('updateBoard', board);
 
