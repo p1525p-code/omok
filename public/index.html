@@ -43,7 +43,32 @@
 </head>
 <body>
     <h1>다함께 오목 게임</h1>
-    
+    <div id="control-panel">
+    <button id="bgm-btn">🎵 배경음 켜기</button>
+</div>
+
+<script>
+    // 1. 사운드 파일 정의
+    const bgm = new Audio('/sounds/bgm.mp3');
+    bgm.loop = true; // 배경음 무한 반복
+    const stoneSound = new Audio('/sounds/stone.mp3');
+    const turnSound = new Audio('/sounds/turn.mp3');
+
+    let isBgmPlaying = false;
+
+    // 2. 배경음 제어 버튼 이벤트
+    const bgmBtn = document.getElementById('bgm-btn');
+    bgmBtn.addEventListener('click', () => {
+        if (!isBgmPlaying) {
+            bgm.play().catch(e => console.log("재생 오류:", e));
+            bgmBtn.innerText = "🔇 배경음 끄기";
+            isBgmPlaying = true;
+        } else {
+            bgm.pause();
+            bgmBtn.innerText = "🎵 배경음 켜기";
+            isBgmPlaying = false;
+        }
+    });
     <div id="control-panel">
         <div>
             현재 역할: <strong id="role-display">확인 중...</strong>
@@ -154,7 +179,12 @@
         }
 
         socket.on('updateBoard', (board) => {
-            const cells = document.querySelectorAll('.cell');
+        // 이전 보드 상태와 비교하여 새로운 돌이 놓였는지 확인하는 로직을 넣으면 좋지만,
+        // 간단하게 업데이트 신호가 올 때마다 소리를 재생하게 할 수 있습니다.
+        stoneSound.currentTime = 0; // 연속 클릭 시 소리가 끊기지 않게 초기화
+        stoneSound.play().catch(e => {}); 
+
+        const cells = document.querySelectorAll('.cell');
             cells.forEach(cell => {
                 const r = parseInt(cell.dataset.row);
                 const c = parseInt(cell.dataset.col);
@@ -173,10 +203,18 @@
         });
 
         socket.on('turnChange', (turn) => {
-            if (isGameOver) return;
-            isMyTurn = (turn === 1); 
-            updateStatusText();
-        });
+        if (isGameOver) return;
+        
+        // 내 턴이 되었을 때 알림음을 들려줍니다.
+        const nextIsMyTurn = (turn === 1 && currentRole === 'teacher') || (turn === 2 && currentRole === 'student');
+        if (nextIsMyTurn) {
+            turnSound.currentTime = 0;
+            turnSound.play().catch(e => {});
+        }
+
+        isMyTurn = (turn === 1); 
+        updateStatusText();
+    });
 
         socket.on('updateVotes', (votes) => {
             document.querySelectorAll('.vote-count').forEach(el => el.remove());
