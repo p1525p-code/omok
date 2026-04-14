@@ -52,20 +52,32 @@ function calculateCurrentVotes() {
     return voteCounts;
 }
 
+// 💡 [추가] 선생님 전용 비밀번호를 마음대로 설정하세요!
+const ADMIN_PASSWORD = "7777"; 
+
 io.on('connection', (socket) => {
-    const host = socket.handshake.headers.host || '';
+    // 💡 클라이언트가 접속할 때 보낸 비밀번호(admin) 값을 확인합니다.
+    const clientPassword = socket.handshake.query.admin;
     
-    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    // 비밀번호가 일치하면 선생님, 아니면 학생으로 배정
+    if (clientPassword === ADMIN_PASSWORD) {
         teacherSocketId = socket.id;
-        console.log('✅ 선생님 접속 완료 (localhost):', socket.id);
+        console.log('✅ 선생님 접속 완료:', socket.id);
         socket.emit('roleConfirmed', 'teacher'); 
-        // 💡 접속한 선생님에게 현재 설정된 시간을 알려줍니다.
         socket.emit('settingsUpdated', { voteTime: currentVoteTimeLimit });
     } else {
-        console.log('🧑‍🎓 학생 접속 완료 (IP):', socket.id);
+        console.log('🧑‍🎓 학생 접속 완료:', socket.id);
         socket.emit('roleConfirmed', 'student'); 
     }
 
+    socket.emit('updateBoard', board);
+    if (isGameOver) {
+        socket.emit('gameOver', currentTurn === 2 ? 'teacher' : 'student'); 
+    } else {
+        socket.emit('turnChange', currentTurn);
+    }
+
+    // ...(이 아래 코드(socket.on...)들은 기존과 동일하게 유지합니다)...
     socket.emit('updateBoard', board);
     if (isGameOver) {
         socket.emit('gameOver', currentTurn === 2 ? 'teacher' : 'student'); 

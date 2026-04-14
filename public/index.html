@@ -63,8 +63,16 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
+       // 💡 [변경됨] 주소창에서 admin= 뒤에 있는 비밀번호를 가져와서 서버로 보냅니다.
+        const urlParams = new URLSearchParams(window.location.search);
+        const adminKey = urlParams.get('admin');
+
+        const socket = io({
+            query: { admin: adminKey }
+        });
+        
         const boardDiv = document.getElementById('board');
+        // ...(이 아래 코드들은 기존과 동일하게 유지합니다)...
         const infoDiv = document.getElementById('info');
         const roleDisplay = document.getElementById('role-display');
         const resetBtn = document.getElementById('reset-btn');
