@@ -88,12 +88,12 @@
         socket.on('roleConfirmed', (role) => {
             currentRole = role;
             if (role === 'teacher') {
-                roleDisplay.innerText = "선생님 (자동 로그인)";
+                roleDisplay.innerText = "선생님";
                 roleDisplay.style.color = "red";
                 resetBtn.style.display = "inline-block"; 
                 settingsPanel.style.display = "block"; // 💡 선생님이면 설정 패널 표시
             } else {
-                roleDisplay.innerText = "학생 (자동 로그인)";
+                roleDisplay.innerText = "학생";
                 roleDisplay.style.color = "blue";
                 resetBtn.style.display = "none"; 
                 stopVoteBtn.style.display = "none"; 
