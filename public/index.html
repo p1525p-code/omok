@@ -2,283 +2,167 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>다함께 오목 (선생님 vs 학생들)</title>
+    <title>다수결 오목 게임 (렌주룰 적용)</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { text-align: center; font-family: sans-serif; background-color: #f4f4f9; }
-        #info { margin: 15px; font-size: 1.5em; font-weight: bold; height: 30px; }
+        /* 기본 레이아웃 스타일 */
+        body { font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f0f0; }
+        #status { font-size: 1.5rem; font-weight: bold; margin: 20px; padding: 10px; background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         
-        #control-panel { background-color: #eee; padding: 10px; margin-bottom: 10px; display: inline-block; border-radius: 8px; }
+        /* 오목판 스타일 */
+        #board { display: grid; grid-template-columns: repeat(15, 30px); grid-template-rows: repeat(15, 30px); gap: 1px; background-color: #dcb35c; padding: 10px; border: 2px solid #8b5a2b; }
+        .cell { width: 30px; height: 30px; background-color: #dcb35c; border: 1px solid rgba(0,0,0,0.1); display: flex; justify-content: center; align-items: center; cursor: pointer; position: relative; }
         
-        /* 💡 추가된 설정 패널 디자인 */
-        #settings-panel {
-            display: none; /* 학생들에게는 보이지 않도록 기본적으로 숨김 */
-            background-color: #dcdde1; padding: 8px 15px; margin-top: 10px; 
-            border-radius: 6px; font-size: 0.9em;
-        }
-        #settings-panel input { width: 50px; text-align: center; font-weight: bold; }
-        #apply-settings-btn { padding: 4px 8px; margin-left: 5px; cursor: pointer; background-color: #0097e6; color: white; border: none; border-radius: 4px; }
-        #apply-settings-btn:hover { background-color: #00a8ff; }
+        /* 바둑알 스타일 */
+        .stone { width: 26px; height: 26px; border-radius: 50%; box-shadow: 1px 1px 2px rgba(0,0,0,0.3); }
+        .black { background-color: #000; }
+        .white { background-color: #fff; }
 
-        #reset-btn { display: none; margin-left: 15px; padding: 5px 10px; background-color: #ff4757; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        #reset-btn:hover { background-color: #ff6b81; }
-        #stop-vote-btn { display: none; margin-left: 10px; padding: 5px 10px; background-color: #ff9f43; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        #stop-vote-btn:hover { background-color: #ffb142; }
-
-        #board { display: inline-grid; grid-template-columns: repeat(15, 30px); grid-template-rows: repeat(15, 30px); background-color: #dcba88; padding: 15px; border: 2px solid #5c4033; box-shadow: 4px 4px 12px rgba(0,0,0,0.4); margin-top: 10px; }
-        .cell { width: 30px; height: 30px; position: relative; cursor: pointer; }
-        .cell::before { content: ''; position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background-color: #333; z-index: 1; }
-        .cell::after { content: ''; position: absolute; top: 0; left: 50%; height: 100%; width: 1px; background-color: #333; z-index: 1; }
-        .top-edge::after { top: 50%; height: 50%; }
-        .bottom-edge::after { height: 50%; }       
-        .left-edge::before { left: 50%; width: 50%; } 
-        .right-edge::before { width: 50%; }          
-        .black, .white { width: 26px; height: 26px; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; box-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
-        .black { background-color: #111; }
-        .white { background-color: #f9f9f9; }
-        .vote-count { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: red; font-weight: bold; font-size: 14px; z-index: 3; pointer-events: none; background-color: rgba(255, 255, 255, 0.8); border-radius: 4px; padding: 1px 4px; }
-        
-        .win-text { color: #2ed573 !important; animation: bounce 1s infinite; }
-        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        /* 컨트롤 패널 및 버튼 */
+        #controls { margin-top: 20px; display: none; } /* 기본적으로 숨김 (선생님만 보임) */
+        button { padding: 10px 20px; font-size: 1rem; cursor: pointer; border-radius: 5px; border: none; background: #4a90e2; color: white; transition: 0.3s; }
+        button:hover { background: #357abd; }
+        #bgm-btn { background: #555; margin-left: 10px; }
     </style>
 </head>
 <body>
-    <h1>다함께 오목 게임</h1>
-    <div id="control-panel">
-    <button id="bgm-btn">🎵 배경음 켜기</button>
-</div>
 
-<script>
-    // 1. 사운드 파일 정의
-    const bgm = new Audio('/sounds/bgm.mp3');
-    bgm.loop = true; // 배경음 무한 반복
-    const stoneSound = new Audio('/sounds/stone.mp3');
-    const turnSound = new Audio('/sounds/turn.mp3');
-
-    let isBgmPlaying = false;
-
-    // 2. 배경음 제어 버튼 이벤트
-    const bgmBtn = document.getElementById('bgm-btn');
-    bgmBtn.addEventListener('click', () => {
-        if (!isBgmPlaying) {
-            bgm.play().catch(e => console.log("재생 오류:", e));
-            bgmBtn.innerText = "🔇 배경음 끄기";
-            isBgmPlaying = true;
-        } else {
-            bgm.pause();
-            bgmBtn.innerText = "🎵 배경음 켜기";
-            isBgmPlaying = false;
-        }
-    });
-    <div id="control-panel">
-        <div>
-            현재 역할: <strong id="role-display">확인 중...</strong>
-            <button id="reset-btn">🔄 게임 초기화</button>
-            <button id="stop-vote-btn">🛑 투표 조기 종료</button>
-        </div>
-        
-        <div id="settings-panel">
-            <label for="vote-time-input">⏱ 투표 시간 설정:</label>
-            <input type="number" id="vote-time-input" value="15" min="3" max="120"> 초
-            <button id="apply-settings-btn">적용하기</button>
-        </div>
-    </div>
-
-    <div id="info">접속 중...</div>
+    <div id="status">서버 연결 중...</div>
+    
     <div id="board"></div>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <div id="controls">
+        <button id="reset-btn">🔄 게임 초기화</button>
+        <button id="bgm-btn">🎵 배경음 켜기</button>
+    </div>
+
     <script>
-       // 💡 [변경됨] 주소창에서 admin= 뒤에 있는 비밀번호를 가져와서 서버로 보냅니다.
+        // 1. [외부 서버 접속 및 선생님 권한 설정]
+        // 주소창의 ?admin=비밀번호를 읽어옵니다.
         const urlParams = new URLSearchParams(window.location.search);
         const adminKey = urlParams.get('admin');
 
+        // 서버에 접속할 때 비밀번호 정보를 함께 보냅니다.
         const socket = io({
             query: { admin: adminKey }
         });
-        
-        const boardDiv = document.getElementById('board');
-        // ...(이 아래 코드들은 기존과 동일하게 유지합니다)...
-        const infoDiv = document.getElementById('info');
-        const roleDisplay = document.getElementById('role-display');
-        const resetBtn = document.getElementById('reset-btn');
-        const stopVoteBtn = document.getElementById('stop-vote-btn');
-        const settingsPanel = document.getElementById('settings-panel');
-        const voteTimeInput = document.getElementById('vote-time-input');
-        const applySettingsBtn = document.getElementById('apply-settings-btn');
-        
-        let currentRole = null;
-        let isMyTurn = false;
-        let isGameOver = false; 
 
+        // 2. [사운드 파일 설정]
+        // public/sounds 폴더에 mp3 파일이 있어야 작동합니다.
+        const bgm = new Audio('/sounds/bgm.mp3');
+        bgm.loop = true; // 배경음악 무한 반복
+        const stoneSound = new Audio('/sounds/stone.mp3');
+        const turnSound = new Audio('/sounds/turn.mp3');
+        let isBgmPlaying = false;
+
+        const boardDiv = document.getElementById('board');
+        const statusDiv = document.getElementById('status');
+        const controlsDiv = document.getElementById('controls');
+        const bgmBtn = document.getElementById('bgm-btn');
+
+        let currentRole = 'student'; // 기본값은 학생
+        let myTurn = false;
+
+        // 3. [선생님/학생 역할 확정]
         socket.on('roleConfirmed', (role) => {
             currentRole = role;
             if (role === 'teacher') {
-                roleDisplay.innerText = "선생님 (자동 로그인)";
-                roleDisplay.style.color = "red";
-                resetBtn.style.display = "inline-block"; 
-                settingsPanel.style.display = "block"; // 💡 선생님이면 설정 패널 표시
+                statusDiv.innerText = "👨‍🏫 선생님으로 접속되었습니다.";
+                controlsDiv.style.display = 'block'; // 선생님에게만 관리자 버튼 표시
             } else {
-                roleDisplay.innerText = "학생 (자동 로그인)";
-                roleDisplay.style.color = "blue";
-                resetBtn.style.display = "none"; 
-                stopVoteBtn.style.display = "none"; 
-                settingsPanel.style.display = "none"; // 💡 학생이면 숨김
-            }
-            updateStatusText();
-        });
-
-        // 💡 설정 적용 버튼 클릭 이벤트
-        applySettingsBtn.addEventListener('click', () => {
-            const newTime = parseInt(voteTimeInput.value);
-            if (newTime >= 3 && newTime <= 120) {
-                socket.emit('updateSettings', { voteTime: newTime });
-            } else {
-                alert("투표 시간은 3초에서 120초 사이로 설정해주세요.");
+                statusDiv.innerText = "🧑‍🎓 학생으로 접속되었습니다. (백돌)";
             }
         });
 
-        // 💡 서버에서 설정이 반영되었다는 응답이 오면 실행됨
-        socket.on('settingsUpdated', (data) => {
-            voteTimeInput.value = data.voteTime;
-            alert(`투표 시간이 ${data.voteTime}초로 성공적으로 설정되었습니다!\n(다음 투표 턴부터 적용됩니다)`);
+        // 4. [오목판 그리기 및 클릭 이벤트]
+        socket.on('updateBoard', (board) => {
+            // 보드가 업데이트될 때마다 착수음 재생
+            stoneSound.currentTime = 0;
+            stoneSound.play().catch(e => {});
+
+            boardDiv.innerHTML = '';
+            for (let r = 0; r < 15; r++) {
+                for (let c = 0; c < 15; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    
+                    // 돌이 놓여있는 경우 표시
+                    if (board[r][c] === 1) {
+                        const stone = document.createElement('div');
+                        stone.className = 'stone black';
+                        cell.appendChild(stone);
+                    } else if (board[r][c] === 2) {
+                        const stone = document.createElement('div');
+                        stone.className = 'stone white';
+                        cell.appendChild(stone);
+                    }
+
+                    // 클릭 시 서버로 좌표 전송
+                    cell.addEventListener('click', () => {
+                        if (currentRole === 'teacher') {
+                            socket.emit('teacherMove', { row: r, col: c });
+                        } else {
+                            socket.emit('studentVote', { row: r, col: c });
+                        }
+                    });
+                    boardDiv.appendChild(cell);
+                }
+            }
         });
 
-        resetBtn.addEventListener('click', () => {
-            if (confirm("정말 바둑판을 싹 비우고 게임을 처음부터 다시 시작할까요?")) {
+        // 5. [턴 변경 알림 및 소리]
+        socket.on('turnChange', (turn) => {
+            const isTeacherTurn = (turn === 1);
+            
+            if (isTeacherTurn) {
+                statusDiv.innerText = "현재 차례: 흑돌 (선생님)";
+                if (currentRole === 'teacher') {
+                    myTurn = true;
+                    turnSound.play().catch(e => {}); // 내 차례가 되면 알림음
+                }
+            } else {
+                statusDiv.innerText = "현재 차례: 백돌 (학생 다수결 투표 중...)";
+                if (currentRole === 'student') {
+                    myTurn = true;
+                    turnSound.play().catch(e => {}); // 학생 차례가 되면 알림음
+                }
+            }
+        });
+
+        // 6. [렌주룰 금수 경고]
+        socket.on('invalidMove', (message) => {
+            alert(message); // 서버에서 보낸 "3-3 금수" 등의 메시지를 띄움
+        });
+
+        // 7. [게임 종료]
+        socket.on('gameOver', (winner) => {
+            if (winner === 'teacher') {
+                alert("게임 종료! 선생님(흑돌) 승리!");
+            } else {
+                alert("게임 종료! 학생들(백돌) 승리!");
+            }
+        });
+
+        // 8. [배경음악 제어]
+        bgmBtn.addEventListener('click', () => {
+            if (!isBgmPlaying) {
+                bgm.play().catch(e => alert("음악 재생을 위해 화면을 먼저 클릭해주세요!"));
+                bgmBtn.innerText = "🔇 배경음 끄기";
+                isBgmPlaying = true;
+            } else {
+                bgm.pause();
+                bgmBtn.innerText = "🎵 배경음 켜기";
+                isBgmPlaying = false;
+            }
+        });
+
+        // 초기화 버튼 이벤트
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            if (confirm("게임을 초기화하시겠습니까?")) {
                 socket.emit('resetGame');
             }
         });
 
-        stopVoteBtn.addEventListener('click', () => {
-            socket.emit('forceStopVote');
-        });
-
-        for (let r = 0; r < 15; r++) {
-            for (let c = 0; c < 15; c++) {
-                const cell = document.createElement('div');
-                cell.className = 'cell';
-                if (r === 0) cell.classList.add('top-edge');
-                if (r === 14) cell.classList.add('bottom-edge');
-                if (c === 0) cell.classList.add('left-edge');
-                if (c === 14) cell.classList.add('right-edge');
-                cell.dataset.row = r;
-                cell.dataset.col = c;
-                cell.addEventListener('click', () => handleCellClick(r, c));
-                boardDiv.appendChild(cell);
-            }
-        }
-
-        function handleCellClick(row, col) {
-            if (isGameOver) return; 
-
-            if (currentRole === 'teacher' && isMyTurn) {
-                socket.emit('teacherMove', { row, col });
-            } else if (currentRole === 'student' && !isMyTurn) {
-                socket.emit('studentVote', { row, col });
-            }
-        }
-
-        socket.on('updateBoard', (board) => {
-        // 이전 보드 상태와 비교하여 새로운 돌이 놓였는지 확인하는 로직을 넣으면 좋지만,
-        // 간단하게 업데이트 신호가 올 때마다 소리를 재생하게 할 수 있습니다.
-        stoneSound.currentTime = 0; // 연속 클릭 시 소리가 끊기지 않게 초기화
-        stoneSound.play().catch(e => {}); 
-
-        const cells = document.querySelectorAll('.cell');
-            cells.forEach(cell => {
-                const r = parseInt(cell.dataset.row);
-                const c = parseInt(cell.dataset.col);
-                cell.innerHTML = ''; 
-                cell.classList.remove('black', 'white');
-                if (board[r][c] === 1) {
-                    const stone = document.createElement('div');
-                    stone.className = 'black';
-                    cell.appendChild(stone);
-                } else if (board[r][c] === 2) {
-                    const stone = document.createElement('div');
-                    stone.className = 'white';
-                    cell.appendChild(stone);
-                }
-            });
-        });
-
-        socket.on('turnChange', (turn) => {
-        if (isGameOver) return;
-        
-        // 내 턴이 되었을 때 알림음을 들려줍니다.
-        const nextIsMyTurn = (turn === 1 && currentRole === 'teacher') || (turn === 2 && currentRole === 'student');
-        if (nextIsMyTurn) {
-            turnSound.currentTime = 0;
-            turnSound.play().catch(e => {});
-        }
-
-        isMyTurn = (turn === 1); 
-        updateStatusText();
-    });
-
-        socket.on('updateVotes', (votes) => {
-            document.querySelectorAll('.vote-count').forEach(el => el.remove());
-            for (const [key, count] of Object.entries(votes)) {
-                const [r, c] = key.split(',');
-                const cell = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
-                if (cell && !cell.querySelector('.black') && !cell.querySelector('.white')) {
-                    const span = document.createElement('span');
-                    span.className = 'vote-count';
-                    span.innerText = count;
-                    cell.appendChild(span);
-                }
-            }
-        });
-
-        socket.on('timerUpdate', (time) => {
-            if (time === '' || isGameOver) return;
-            if (currentRole === 'student' && !isMyTurn) {
-                infoDiv.innerText = `학생 턴입니다! 투표 남은 시간: ${time}초`;
-            } else if (currentRole === 'teacher' && !isMyTurn) {
-                infoDiv.innerText = `학생들이 투표 중입니다... (${time}초 남음)`;
-            }
-        });
-
-        socket.on('gameOver', (winner) => {
-            isGameOver = true;
-            stopVoteBtn.style.display = "none"; 
-            infoDiv.classList.add('win-text'); 
-            
-            if (winner === 'teacher') {
-                infoDiv.innerText = "🎉 선생님 승리! (검은 돌 5개 완성) 🎉";
-            } else {
-                infoDiv.innerText = "🎉 학생들 승리! (흰 돌 5개 완성) 🎉";
-            }
-        });
-
-        socket.on('gameReset', () => {
-            isGameOver = false;
-            infoDiv.classList.remove('win-text');
-        });
-       // 💡 [추가됨] 서버에서 렌주룰 금수 경고가 오면 팝업창을 띄웁니다.
-        socket.on('invalidMove', (message) => {
-            alert(message);
-        });
-
-        function updateStatusText() {
-            if (!currentRole || isGameOver) return;
-            
-            if (isMyTurn) {
-                if (currentRole === 'teacher') {
-                    infoDiv.innerText = "선생님 턴입니다. 돌을 놓아주세요.";
-                    stopVoteBtn.style.display = "none"; 
-                } else {
-                    infoDiv.innerText = "선생님 턴입니다. 대기 중...";
-                }
-            } else {
-                if (currentRole === 'teacher') {
-                    infoDiv.innerText = "학생들이 투표 중입니다...";
-                    stopVoteBtn.style.display = "inline-block"; 
-                } else {
-                    infoDiv.innerText = "학생 턴입니다! 원하는 곳을 클릭하여 투표하세요.";
-                }
-            }
-        }
     </script>
 </body>
 </html>
