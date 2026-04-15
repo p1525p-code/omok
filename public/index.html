@@ -49,6 +49,7 @@
             현재 역할: <strong id="role-display">확인 중...</strong>
             <button id="reset-btn">🔄 게임 초기화</button>
             <button id="stop-vote-btn">🛑 투표 조기 종료</button>
+	    <button id="bgm-btn">🎵 배경음 켜기</button>
         </div>
         
         <div id="settings-panel">
@@ -66,13 +67,39 @@
        // 💡 [변경됨] 주소창에서 admin= 뒤에 있는 비밀번호를 가져와서 서버로 보냅니다.
         const urlParams = new URLSearchParams(window.location.search);
         const adminKey = urlParams.get('admin');
+      // --- 1. 사운드 객체 초기화 --
+      // Audio 객체를 생성합니다. 파일 경로가 정확해야 합니다.
+        const bgm = new Audio('/sounds/bgm.mp3');
+            bgm.loop = true; // 배경음악은 무한 반복되도록 설정합니다.
+            bgm.volume = 0.4; // 배경음악 볼륨을 약간 낮춥니다 (0.0 ~ 1.0).
+        const stoneSound = new Audio('/sounds/stone.mp3');
+        const turnSound = new Audio('/sounds/turn.mp3');
+
+        let isBgmPlaying = false;
+        // --- 2. 배경음 제어 함수 (브라우저 정책 대응) ---
+	const bgmBtn = document.getElementById('bgm-btn');
+	bgmBtn.addEventListener('click', () => {
+    		if (!isBgmPlaying) {
+        	// 브라우저의 오디오 잠금을 해제하며 재생을 시작합니다.
+        	bgm.play().then(() => {
+            		bgmBtn.innerText = "🔇 배경음 끄기";
+            		isBgmPlaying = true;
+        	}).catch(error => {
+            		console.error("재생 실패:", error);
+            		alert("파일이 없거나 브라우저 설정에 의해 차단되었습니다.");
+        	});
+    	} else {
+        	bgm.pause();
+        	bgmBtn.innerText = "🎵 배경음 켜기";
+        	isBgmPlaying = false;
+    	}
+	});
 
         const socket = io({
             query: { admin: adminKey }
         });
         
         const boardDiv = document.getElementById('board');
-        // ...(이 아래 코드들은 기존과 동일하게 유지합니다)...
         const infoDiv = document.getElementById('info');
         const roleDisplay = document.getElementById('role-display');
         const resetBtn = document.getElementById('reset-btn');
@@ -154,6 +181,10 @@
         }
 
         socket.on('updateBoard', (board) => {
+		stoneSound.currentTime = 0; 
+    		stoneSound.play().catch(e => {
+        		console.log("소리 재생을 위해 먼저 화면이나 배경음 버튼을 클릭해주세요.");
+    		});
             const cells = document.querySelectorAll('.cell');
             cells.forEach(cell => {
                 const r = parseInt(cell.dataset.row);
@@ -174,7 +205,14 @@
 
         socket.on('turnChange', (turn) => {
             if (isGameOver) return;
-            isMyTurn = (turn === 1); 
+            isMyTurn = (turn === 1);
+	    const isTeacherTurn = (turn === 1);
+   	    const isMyActualTurn = (isTeacherTurn && currentRole === 'teacher') || (!isTeacherTurn && currentRole === 'student');
+
+   	    if (isMyActualTurn) {
+       		turnSound.currentTime = 0;
+        	turnSound.play().catch(e => {});
+	   }
             updateStatusText();
         });
 
